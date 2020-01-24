@@ -5,19 +5,21 @@ import json
 import os
 import numpy as np
 import tensorflow as tf
+import time
 
 import model, sample, encoder
 
 def interact_model(
-    model_name='124M',
+    model_name='1558M',
     seed=None,
     nsamples=1,
     batch_size=1,
-    length=None,
-    temperature=1,
+    length=180,
+    temperature=.6, # .5 usually has numbered steps, .7 usually does not
     top_k=0,
     top_p=1,
     models_dir='models',
+    input_samples=["The steps to bake a cake are:"],
 ):
     """
     Interactively run the model
@@ -69,8 +71,26 @@ def interact_model(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
+        input_iter = 0
+        o_file = open("output.txt", "a")
+        o_file.write("Test with temperature: " + str(temperature) + '\n')
+        print("Test with temperature: " + str(temperature) + '\n')
+        start_time = time.perf_counter()
         while True:
-            raw_text = input("Model prompt >>> ")
+            raw_text = ""
+            if (input_iter < len(input_samples)):
+                raw_text = input_samples[input_iter]
+                input_iter += 1
+                print(raw_text)
+                o_file.write('\n' + raw_text + '\n')
+            elif (len(input_samples) == 0):
+                raw_text = input("Model prompt >>> ")
+            elif (input_iter >= len(input_samples)):
+                time_elapsed = time.perf_counter()-start_time
+
+                o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+                print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+                break
             while not raw_text:
                 print('Prompt should not be empty!')
                 raw_text = input("Model prompt >>> ")
@@ -83,8 +103,15 @@ def interact_model(
                 for i in range(batch_size):
                     generated += 1
                     text = enc.decode(out[i])
-                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
+                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
+                    o_file.write("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     print(text)
+                    try:
+                        o_file.write(text + '\n')
+                    except:
+                        print("\nUnknown character encountered. Moving to next step\n")
+                        o_file.write("\nUnknown character encountered. Moving to next step\n")
+                        break
             print("=" * 80)
 
 if __name__ == '__main__':
