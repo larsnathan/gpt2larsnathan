@@ -1,3 +1,5 @@
+# GPT-2 copy for research purposes. Cloned by Nathan Larson.
+
 **Status:** Archive (code is provided as-is, no updates expected)
 
 # gpt-2
