@@ -59,12 +59,20 @@ def sample_sequence(*, hparams, length, start_token=None, batch_size=None, conte
         }
 
     with tf.name_scope('sample_sequence'):
+        #Past is Tensor("sample_sequence/while/Identity_1:0", shape=(1, 12, 2, 12, ?, 64), dtype=float32)
+        #Prev is Tensor("sample_sequence/while/Identity_2:0", shape=(1, ?), dtype=int32)
+        #Output is Tensor("sample_sequence/while/Identity_3:0", shape=(1, ?), dtype=int32)
+        #Logits is Tensor("sample_sequence/while/Select:0", shape=(1, 50257), dtype=float32) - Is this the weights?
+        #Samples is Tensor("sample_sequence/while/multinomial/Multinomial:0", shape=(1, 1), dtype=int32)
+        #Keep experimenting with variables here
         def body(past, prev, output):
+            print("HERE -----------")
             next_outputs = step(hparams, prev, past=past)
             logits = next_outputs['logits'][:, -1, :]  / tf.to_float(temperature)
             logits = top_k_logits(logits, k=top_k)
             logits = top_p_logits(logits, p=top_p)
             samples = tf.multinomial(logits, num_samples=1, output_dtype=tf.int32)
+            print(logits)
             return [
                 next_outputs['presents'] if past is None else tf.concat([past, next_outputs['presents']], axis=-2),
                 samples,
