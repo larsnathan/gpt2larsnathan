@@ -18,11 +18,11 @@ def interact_model(
     nsamples=1,
     batch_size=1,
     length=180,
-    temperature=.6, # .5 usually has numbered steps, .7 usually does not
+    temperature=1, # .5 usually has numbered steps, .7 usually does not
     top_k=40,
     top_p=1,
     models_dir='models',
-    input_samples=["The steps to bake a cake are:"],
+    input_samples=[],
 ):
     """
     Interactively run the model
@@ -64,6 +64,12 @@ def interact_model(
         context = tf.placeholder(tf.int32, [batch_size, None])
         np.random.seed(seed)
         tf.set_random_seed(seed)
+        logits = sample.get_logits(
+            hparams=hparams, length=length,
+            context=context,
+            batch_size=batch_size,
+            temperature=temperature, top_k=top_k, top_p=top_p
+        )
         output = sample.sample_sequence( #Basically, output isn't actually the values in the array, but is the tensor/function of the method sample.sample_sequence
             hparams=hparams, length=length,
             context=context,
@@ -71,6 +77,7 @@ def interact_model(
             temperature=temperature, top_k=top_k, top_p=top_p
         ) #Output is a Tensor object from the while loop in sample sequence
         #Output[0] is a strided slice
+
 
         saver = tf.train.Saver()
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
@@ -90,6 +97,11 @@ def interact_model(
                 o_file.write('\n' + raw_text + '\n')
             elif (len(input_samples) == 0):
                 raw_text = input("Model prompt >>> ")
+                word1 = input("Enter word 1 >>> ")
+                word2 = input("Enter word 2 >>> ")
+                enc_word1 = enc.encode(word1)
+                enc_word2 = enc.encode(word2)
+
             elif (input_iter >= len(input_samples)):
                 time_elapsed = time.perf_counter()-start_time
 
@@ -105,10 +117,22 @@ def interact_model(
                 out = sess.run(output, feed_dict={
                     context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
                 })[:, len(context_tokens):]
+                out_logits = sess.run(logits, feed_dict={
+                    context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
+                })[:, len(context_tokens):]
                 print(output.value_index)
                 for i in range(batch_size):
                     generated += 1
                     print(out)
+                    #clipped_logits = out_logits[out_logits != -10000000000.0]
+                    # for index in range(50252):
+                    #     if (out_logits.item(index) != -10000000000.0):
+                    #         print(enc.decode([index]))
+                    print(out_logits.argmax())
+                    print("For word 1 - encoded as: " + str(enc_word1[0]))
+                    print(out_logits.item(enc_word1[0]))
+                    print("For word 2 - encoded as: " + str(enc_word2[0]))
+                    print(out_logits.item(enc_word2[0]))
                     # out1, out2 = zigzag(out[i])
                     # text1 = enc.decode(out1) #out[i] is a numpy array with the encoded values for the samples. Size [len,]
                     # text2 = enc.decode(out2)

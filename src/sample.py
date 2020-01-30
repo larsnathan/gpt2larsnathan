@@ -40,6 +40,33 @@ def top_p_logits(logits, p):
         logits,
     )
 
+def get_logits(*, hparams, length, start_token=None, batch_size=None, context=None, temperature=1, top_k=0, top_p=1):
+    if start_token is None:
+        assert context is not None, 'Specify exactly one of start_token and context!'
+    else:
+        assert context is None, 'Specify exactly one of start_token and context!'
+        context = tf.fill([batch_size, 1], start_token)
+
+    def step(hparams, tokens, past=None):
+        lm_output = model.model(hparams=hparams, X=tokens, past=past, reuse=tf.AUTO_REUSE)
+        print(lm_output)
+        logits = lm_output['logits'][:, :, :hparams.n_vocab] #The logits from the model
+        presents = lm_output['present'] #The present from the model
+        presents.set_shape(model.past_shape(hparams=hparams, batch_size=batch_size))
+        return {
+            'logits': logits,
+            'presents': presents,
+        }
+
+    with tf.name_scope('get_logits'): #A function to get the logits for the next predicted word instead of a sequence of tokens
+        def next_logits(past, prev, output):
+            next_outputs = step(hparams, prev, past=past)
+            logits = next_outputs['logits'][:, -1, :]  / tf.to_float(temperature)
+            logits = top_k_logits(logits, k=top_k)
+            logits = top_p_logits(logits, p=top_p)
+            return logits
+
+        return next_logits(None, context, context)
 
 def sample_sequence(*, hparams, length, start_token=None, batch_size=None, context=None, temperature=1, top_k=0, top_p=1):
     if start_token is None:
@@ -77,7 +104,7 @@ def sample_sequence(*, hparams, length, start_token=None, batch_size=None, conte
             return [
                 next_outputs['presents'] if past is None else tf.concat([past, next_outputs['presents']], axis=-2),
                 samples,
-                tf.concat([output,[[0]], samples], axis=1) #This is tokens from the while loop.
+                tf.concat([output, samples], axis=1) #This is tokens from the while loop.
                 #Basically, output already has all the existing samples, and we are recursively adding on to the array of samples.
             ]
 

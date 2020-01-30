@@ -1,5 +1,5 @@
 """Byte pair encoding utilities"""
-
+#Note for the encoder: \u0120 is a space
 import os
 import json
 import regex as re
