@@ -9,6 +9,9 @@ import time
 
 import model, sample, encoder
 
+def zigzag(seq):
+  return seq[::2], seq[1::2]
+
 def interact_model(
     model_name='124M',
     seed=None,
@@ -56,11 +59,12 @@ def interact_model(
     elif length > hparams.n_ctx:
         raise ValueError("Can't get samples longer than window size: %s" % hparams.n_ctx)
 
+
     with tf.Session(graph=tf.Graph()) as sess:
         context = tf.placeholder(tf.int32, [batch_size, None])
         np.random.seed(seed)
         tf.set_random_seed(seed)
-        output = sample.sample_sequence(
+        output = sample.sample_sequence( #Basically, output isn't actually the values in the array, but is the tensor/function of the method sample.sample_sequence
             hparams=hparams, length=length,
             context=context,
             batch_size=batch_size,
@@ -101,13 +105,18 @@ def interact_model(
                 out = sess.run(output, feed_dict={
                     context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
                 })[:, len(context_tokens):]
-                print(output.shape)
+                print(output.value_index)
                 for i in range(batch_size):
                     generated += 1
                     print(out)
-                    text = enc.decode(out[i]) #out[i] is a numpy array with the encoded values for the samples. Size [len,]
+                    # out1, out2 = zigzag(out[i])
+                    # text1 = enc.decode(out1) #out[i] is a numpy array with the encoded values for the samples. Size [len,]
+                    # text2 = enc.decode(out2)
+                    text = enc.decode(out[i])
                     print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     o_file.write("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
+                    # print(text1)
+                    # print(text2)
                     print(text)
                     try:
                         o_file.write(text + '\n')

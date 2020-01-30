@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 import model
+import sys
 
 def top_k_logits(logits, k):
     if k == 0:
@@ -49,9 +50,9 @@ def sample_sequence(*, hparams, length, start_token=None, batch_size=None, conte
 
     def step(hparams, tokens, past=None):
         lm_output = model.model(hparams=hparams, X=tokens, past=past, reuse=tf.AUTO_REUSE)
-
-        logits = lm_output['logits'][:, :, :hparams.n_vocab]
-        presents = lm_output['present']
+        print(lm_output)
+        logits = lm_output['logits'][:, :, :hparams.n_vocab] #The logits from the model
+        presents = lm_output['present'] #The present from the model
         presents.set_shape(model.past_shape(hparams=hparams, batch_size=batch_size))
         return {
             'logits': logits,
@@ -63,20 +64,21 @@ def sample_sequence(*, hparams, length, start_token=None, batch_size=None, conte
         #Prev is Tensor("sample_sequence/while/Identity_2:0", shape=(1, ?), dtype=int32)
         #Output is Tensor("sample_sequence/while/Identity_3:0", shape=(1, ?), dtype=int32)
         #Logits is Tensor("sample_sequence/while/Select:0", shape=(1, 50257), dtype=float32) - Is this the weights?
-        #Samples is Tensor("sample_sequence/while/multinomial/Multinomial:0", shape=(1, 1), dtype=int32)
+        #Samples is Tensor("sample_sequence/while/multinomial/Multinomial:0", shape=(1, x), dtype=int32) - Where x is num_samples
         #Keep experimenting with variables here
         def body(past, prev, output):
-            print("HERE -----------")
             next_outputs = step(hparams, prev, past=past)
             logits = next_outputs['logits'][:, -1, :]  / tf.to_float(temperature)
             logits = top_k_logits(logits, k=top_k)
-            logits = top_p_logits(logits, p=top_p)
-            samples = tf.multinomial(logits, num_samples=1, output_dtype=tf.int32)
-            print(logits)
+            logits = top_p_logits(logits, p=top_p) #The logits are the actual weights as far as I'm aware.
+            # vvv This part is what we need to change to get the weights instead of samples
+            samples = tf.random.categorical(logits, num_samples=1, dtype=tf.int32) #I think num_samples changes the number of results we get
+            print(samples)
             return [
                 next_outputs['presents'] if past is None else tf.concat([past, next_outputs['presents']], axis=-2),
                 samples,
-                tf.concat([output, samples], axis=1)
+                tf.concat([output,[[0]], samples], axis=1) #This is tokens from the while loop.
+                #Basically, output already has all the existing samples, and we are recursively adding on to the array of samples.
             ]
 
         past, prev, output = body(None, context, context)

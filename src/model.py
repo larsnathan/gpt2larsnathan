@@ -3,7 +3,7 @@ import tensorflow as tf
 from tensorflow.contrib.training import HParams
 
 def default_hparams():
-    return HParams(
+    return HParams( #TODO: Find out what all of these affect
         n_vocab=0,
         n_ctx=1024,
         n_embd=768,
@@ -144,7 +144,7 @@ def positions_for(tokens, past_length):
     return expand_tile(past_length + tf.range(nsteps), batch_size)
 
 
-def model(hparams, X, past=None, scope='model', reuse=False):
+def model(hparams, X, past=None, scope='model', reuse=False): #I think this is the important part where we get the data from the model
     with tf.variable_scope(scope, reuse=reuse):
         results = {}
         batch, sequence = shape_list(X)
