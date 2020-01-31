@@ -15,11 +15,10 @@ def interact_model(
     nsamples=1,
     batch_size=1,
     length=180,
-    temperature=1, # .5 usually has numbered steps, .7 usually does not
-    top_k=50257,
+    temperature=1, # changing the temperature changes the probabilities
+    top_k=50257, # To get the probability of all possible outcomes for the next token
     top_p=1,
     models_dir='models',
-    input_samples=[],
 ):
     """
     Interactively run the model
@@ -67,63 +66,69 @@ def interact_model(
             batch_size=batch_size,
             temperature=temperature, top_k=top_k, top_p=top_p
         )
-        output = sample.sample_sequence( #Basically, output isn't actually the values in the array, but is the tensor/function of the method sample.sample_sequence
-            hparams=hparams, length=length,
-            context=context,
-            batch_size=batch_size,
-            temperature=temperature, top_k=top_k, top_p=top_p
-        ) #Output is a Tensor object from the while loop in sample sequence
-        #Output[0] is a strided slice
-
 
         saver = tf.train.Saver()
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
         input_iter = 0
-        # o_file = open("output.txt", "a")
         start_time = time.perf_counter()
         while True:
-            raw_text = ""
-            if (input_iter < len(input_samples)):
-                raw_text = input_samples[input_iter]
-                input_iter += 1
-                print(raw_text)
-                # o_file.write('\n' + raw_text + '\n')
-            elif (len(input_samples) == 0):
-                raw_text = input("Model prompt >>> ")
-
-            time_elapsed = time.perf_counter()-start_time
-
-            # o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
-            print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+            raw_text = input("Context prompt >>> ")
+            word1 = input("Enter phrase 1 >>> ")
+            word2 = input("Enter phrase 2 >>> ")
+            enc_word1 = enc.encode(word1)
+            enc_word2 = enc.encode(word2)
 
             while not raw_text:
                 print('Prompt should not be empty!')
-                raw_text = input("Model prompt >>> ")
+                raw_text = input("Context prompt >>> ")
             context_tokens = enc.encode(raw_text)
             generated = 0
             for _ in range(nsamples // batch_size):
-                out = sess.run(output, feed_dict={
+                original_context = context
+                out_logits = sess.run(logits, feed_dict={
                     context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
-                })#[:, len(context_tokens):]
+                })
                 for i in range(batch_size):
                     generated += 1
-                    print(out)
-
                     total_chance = 0
-                    
-                    text = enc.decode(out[i])
-                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
-                    # o_file.write("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
-                    
-                    print(text)
-                    # try:
-                    #     o_file.write(text + '\n')
-                    # except:
-                    #     print("\nUnknown character encountered. Moving to next step\n")
-                    #     o_file.write("\nUnknown character encountered. Moving to next step\n")
-                    #     break
+                    for token in enc_word1: #Summing up probabilities for phrase 1
+                        #This finds the logit value for the next token and add it to the current probability
+                        prob = out_logits.item(token)
+                        context_tokens = np.append(context_tokens, token)
+                        total_chance += prob
+                        print("Probability for this token: " + str(prob) + " - totaling to: " + str(total_chance))
+                        out_logits = sess.run(logits, feed_dict={
+                            context: [context_tokens for _ in range(batch_size)] #Context_tokens will continually be added upon as we iterate through the phrase
+                        })
+
+                    print("For phrase 1 - encoded as: " + str(enc_word1))
+                    print("Logarithmic probability is: " + str(total_chance))
+                    print("Average is: " + str(total_chance/len(enc_word1)))
+                    print("=" * 80)
+                
+                    context = original_context
+                    out_logits = sess.run(logits, feed_dict={
+                        context: [context_tokens for _ in range(batch_size)]
+                    })
+                    total_chance = 0
+                    for token in enc_word2: #Summing up probabilities for phrase 2
+                        #Find the logit value for the next token and add it to the current probability
+                        prob = out_logits.item(token)
+                        context_tokens = np.append(context_tokens, token)
+                        total_chance += prob
+                        print("Probability for this token: " + str(prob) + " - totaling to: " + str(total_chance))
+                        out_logits = sess.run(logits, feed_dict={
+                            context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
+                        })
+                    print("For phrase 2 - encoded as: " + str(enc_word2))
+                    print("Logarithmic probability is: " + str(total_chance))
+                    print("Average is: " + str(total_chance/len(enc_word2)))
+
+            time_elapsed = time.perf_counter()-start_time
+            print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+            start_time = time.perf_counter()
             print("=" * 80)
 
 if __name__ == '__main__':
