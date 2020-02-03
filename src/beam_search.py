@@ -9,14 +9,29 @@ import time
 
 import model, sample, encoder
 
-def interact_model(
+# How it should function:
+# We give the model a context, same as with the interactive samples program
+# For each loop, we take the $top_k highest probability results
+# We then take each of these possibilities and append them to the context to make $top_k unique contexts
+# Keep doing this until we have $length number of tokens appended to the context
+# The complexity should be $top_k ^ $length
+
+#Ideas:
+# - Make it more efficient by going a certain length (a variable like $partition_size), and then collapsing it down to the most likely sentence, and then continuing
+# - Should the algorithm be completely run with the Tensor object in sample.py or converted to ndarray in this file?
+# - The temperature will probably have to be fairly low
+# - Should we use length and top_k variables or make seperate ones?
+# - Could be recursive: for k in top_k: context += k; next_tokens(k, context);
+
+
+def beam_search(
     model_name='124M',
     seed=None,
     nsamples=1,
     batch_size=1,
-    length=180,
+    length=10,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
-    top_k=50257,
+    top_k=5,
     top_p=1,
     models_dir='models',
     input_samples=[],
@@ -61,6 +76,12 @@ def interact_model(
         context = tf.placeholder(tf.int32, [batch_size, None])
         np.random.seed(seed)
         tf.set_random_seed(seed)
+        logits = sample.get_logits(
+            hparams=hparams, length=length,
+            context=context,
+            batch_size=batch_size,
+            temperature=temperature, top_k=top_k, top_p=top_p
+        )
         output = sample.sample_sequence( #Basically, output isn't actually the values in the array, but is the tensor/function of the method sample.sample_sequence
             hparams=hparams, length=length,
             context=context,
@@ -75,7 +96,6 @@ def interact_model(
         saver.restore(sess, ckpt)
 
         input_iter = 0
-        # o_file = open("output.txt", "a")
         start_time = time.perf_counter()
         while True:
             raw_text = ""
@@ -83,13 +103,11 @@ def interact_model(
                 raw_text = input_samples[input_iter]
                 input_iter += 1
                 print(raw_text)
-                # o_file.write('\n' + raw_text + '\n')
             elif (len(input_samples) == 0):
                 raw_text = input("Model prompt >>> ")
 
             time_elapsed = time.perf_counter()-start_time
 
-            # o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
             print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
 
             while not raw_text:
@@ -100,7 +118,7 @@ def interact_model(
             for _ in range(nsamples // batch_size):
                 out = sess.run(output, feed_dict={
                     context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
-                })#[:, len(context_tokens):]
+                })[:, len(context_tokens):]
                 for i in range(batch_size):
                     generated += 1
                     print(out)
@@ -109,19 +127,26 @@ def interact_model(
                     
                     text = enc.decode(out[i])
                     print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
-                    # o_file.write("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     
                     print(text)
-                    # try:
-                    #     o_file.write(text + '\n')
-                    # except:
-                    #     print("\nUnknown character encountered. Moving to next step\n")
-                    #     o_file.write("\nUnknown character encountered. Moving to next step\n")
-                    #     break
+
             print("=" * 80)
 
-if __name__ == '__main__':
-    fire.Fire(interact_model)
+    #This is partially pseudocode. Needs to be tested to see if it works
+    def recursive_search(token, context_tokens):
+        if "The length is reached":
+            #See if it is the highest probability and replace the context_tokens if so
+        context_tokens = np.append(context_tokens, token)
+        out_logits = sess.run(logits, feed_dict={
+                    context: [context_tokens for _ in range(batch_size)]
+                })
+        out_logits = out_logits[out_logits > -10000000000.0]
+        for logit in out_logits:
+            recursive_search(logit, context_tokens)
+        
+    
 
-#Sum up the logits for all the tokens that are put in
-#Sum because they are in log space
+
+if __name__ == '__main__':
+    fire.Fire(beam_search)
+

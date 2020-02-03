@@ -9,17 +9,18 @@ import time
 
 import model, sample, encoder
 
-def interact_model(
-    model_name='124M',
+def probability_model(
+    model_name='1558M', # When using a larger model size, the probabilities are much higher (often positive instead of negative)
     seed=None,
     nsamples=1,
     batch_size=1,
     length=180,
-    temperature=1, # changing the temperature changes the probabilities
+    temperature=.6, # changing the temperature changes the probabilities
     top_k=50257, # To get the probability of all possible outcomes for the next token
     top_p=1,
     models_dir='models',
 ):
+#Note: By increasing the temperature of the model, we lower the variance of it, making the probabilities of every outcome extremely high and very similar
     """
     Interactively run the model
     :model_name=124M : String, which model to use
@@ -99,6 +100,7 @@ def interact_model(
                         context_tokens = np.append(context_tokens, token)
                         total_chance += prob
                         print("Probability for this token: " + str(prob) + " - totaling to: " + str(total_chance))
+                        print("Variance for this token: " + str(out_logits.var()))
                         out_logits = sess.run(logits, feed_dict={
                             context: [context_tokens for _ in range(batch_size)] #Context_tokens will continually be added upon as we iterate through the phrase
                         })
@@ -132,7 +134,7 @@ def interact_model(
             print("=" * 80)
 
 if __name__ == '__main__':
-    fire.Fire(interact_model)
+    fire.Fire(probability_model)
 
 #Sum up the logits for all the tokens that are put in
 #Sum because they are in log space

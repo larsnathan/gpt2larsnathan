@@ -49,7 +49,6 @@ def get_logits(*, hparams, length, start_token=None, batch_size=None, context=No
 
     def step(hparams, tokens, past=None):
         lm_output = model.model(hparams=hparams, X=tokens, past=past, reuse=tf.AUTO_REUSE)
-        print(lm_output)
         logits = lm_output['logits'][:, :, :hparams.n_vocab] #The logits from the model
         presents = lm_output['present'] #The present from the model
         presents.set_shape(model.past_shape(hparams=hparams, batch_size=batch_size))
@@ -77,7 +76,6 @@ def sample_sequence(*, hparams, length, start_token=None, batch_size=None, conte
 
     def step(hparams, tokens, past=None):
         lm_output = model.model(hparams=hparams, X=tokens, past=past, reuse=tf.AUTO_REUSE)
-        print(lm_output)
         logits = lm_output['logits'][:, :, :hparams.n_vocab] #The logits from the model
         presents = lm_output['present'] #The present from the model
         presents.set_shape(model.past_shape(hparams=hparams, batch_size=batch_size))
@@ -100,7 +98,6 @@ def sample_sequence(*, hparams, length, start_token=None, batch_size=None, conte
             logits = top_p_logits(logits, p=top_p) #The logits are the actual weights as far as I'm aware.
             # vvv This part is what we need to change to get the weights instead of samples
             samples = tf.random.categorical(logits, num_samples=1, dtype=tf.int32) #I think num_samples changes the number of results we get
-            print(samples)
             return [
                 next_outputs['presents'] if past is None else tf.concat([past, next_outputs['presents']], axis=-2),
                 samples,
