@@ -19,6 +19,8 @@ def probability_model(
     top_k=50257, # To get the probability of all possible outcomes for the next token
     top_p=1,
     models_dir='models',
+    input_context=None,
+    input_phrases=None
 ):
 #Note: By increasing the temperature of the model, we lower the variance of it, making the probabilities of every outcome extremely high and very similar
     """
@@ -72,12 +74,20 @@ def probability_model(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
+        o_file = open("outprob.txt", "a")
+        o_file.write(model_name + " - Temperature: " + str(temperature) + '\n')
+
         input_iter = 0
         start_time = time.perf_counter()
         while True:
-            raw_text = input("Context prompt >>> ")
-            word1 = input("Enter phrase 1 >>> ")
-            word2 = input("Enter phrase 2 >>> ")
+            if input_context is None:
+                raw_text = input("Context prompt >>> ")
+                word1 = input("Enter phrase 1 >>> ")
+                word2 = input("Enter phrase 2 >>> ")
+            else:
+                raw_text = input_context
+                word1 = input_phrases[0]
+                word2 = input_phrases[1]
             enc_word1 = enc.encode(word1)
             enc_word2 = enc.encode(word2)
 
@@ -100,7 +110,7 @@ def probability_model(
                         context_tokens = np.append(context_tokens, token)
                         total_chance += prob
                         print("Probability for this token: " + str(prob) + " - totaling to: " + str(total_chance))
-                        print("Variance for this token: " + str(out_logits.var()))
+                        # print("Variance for this token: " + str(out_logits.var()))
                         out_logits = sess.run(logits, feed_dict={
                             context: [context_tokens for _ in range(batch_size)] #Context_tokens will continually be added upon as we iterate through the phrase
                         })
@@ -109,6 +119,10 @@ def probability_model(
                     print("Logarithmic probability is: " + str(total_chance))
                     print("Average is: " + str(total_chance/len(enc_word1)))
                     print("=" * 80)
+                    o_file.write("For phrase 1 - encoded as: " + str(enc_word1) + '\n')
+                    o_file.write("Logarithmic probability is: " + str(total_chance) + '\n')
+                    o_file.write("Average is: " + str(total_chance/len(enc_word1)) + '\n')
+                    o_file.write("=" * 80 + '\n')
                 
                     context = original_context
                     out_logits = sess.run(logits, feed_dict={
@@ -127,11 +141,18 @@ def probability_model(
                     print("For phrase 2 - encoded as: " + str(enc_word2))
                     print("Logarithmic probability is: " + str(total_chance))
                     print("Average is: " + str(total_chance/len(enc_word2)))
+                    o_file.write("For phrase 2 - encoded as: " + str(enc_word2) + '\n')
+                    o_file.write("Logarithmic probability is: " + str(total_chance) + '\n')
+                    o_file.write("Average is: " + str(total_chance/len(enc_word2)) + '\n')
 
             time_elapsed = time.perf_counter()-start_time
             print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
             start_time = time.perf_counter()
             print("=" * 80)
+            o_file.write("="*80 + '\n\n')
+
+            if input_context is not None:
+                return
 
 if __name__ == '__main__':
     fire.Fire(probability_model)

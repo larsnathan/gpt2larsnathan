@@ -23,15 +23,34 @@ import model, sample, encoder
 # - Should we use length and top_k variables or make seperate ones?
 # - Could be recursive: for k in top_k: context += k; next_tokens(k, context);
 
+# def recursive_search(tokens, current_prob, max_length, max_prob, sess, logits):
+#     context = tf.placeholder(tf.int32, [1, None])
+#     if (len(tokens) >= max_length):
+#         #See if it is the highest probability and replace the context_tokens if so
+#         if (current_prob > max_prob):
+#             max_prob = current_prob
+#             max_tokens = tokens
+#         return
+
+#     out_logits = sess.run(logits, feed_dict={
+#                 context: [tokens for _ in range(1)]
+#             })
+
+#     for logit_index in range(out_logits.size):
+#         if (out_logits.item(logit_index) > -100000000000.000):
+#             new_context = np.append(tokens, logit_index)
+#             current_prob += out_logits.item(logit_index)
+#             recursive_search(new_context, current_prob, max_length, max_prob, sess, logits)
 
 def beam_search(
     model_name='124M',
     seed=None,
     nsamples=1,
     batch_size=1,
-    length=10,
+    length=30,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
-    top_k=5,
+    beam_width=3,
+    top_k=3,
     top_p=1,
     models_dir='models',
     input_samples=[],
@@ -55,11 +74,14 @@ def beam_search(
      special setting meaning no restrictions. 40 generally is a good value.
      :models_dir : path to parent folder containing model subfolders
      (i.e. contains the <model_name> folder)
-    """
+    """   
+
     models_dir = os.path.expanduser(os.path.expandvars(models_dir))
     if batch_size is None:
         batch_size = 1
     assert nsamples % batch_size == 0
+
+    top_k = beam_width #Set the top_k to the beam_width to only find the beam_width number of logits
 
     enc = encoder.get_encoder(model_name, models_dir)
     hparams = model.default_hparams()
@@ -82,14 +104,6 @@ def beam_search(
             batch_size=batch_size,
             temperature=temperature, top_k=top_k, top_p=top_p
         )
-        output = sample.sample_sequence( #Basically, output isn't actually the values in the array, but is the tensor/function of the method sample.sample_sequence
-            hparams=hparams, length=length,
-            context=context,
-            batch_size=batch_size,
-            temperature=temperature, top_k=top_k, top_p=top_p
-        ) #Output is a Tensor object from the while loop in sample sequence
-        #Output[0] is a strided slice
-
 
         saver = tf.train.Saver()
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
@@ -116,33 +130,74 @@ def beam_search(
             context_tokens = enc.encode(raw_text)
             generated = 0
             for _ in range(nsamples // batch_size):
-                out = sess.run(output, feed_dict={
-                    context: [context_tokens for _ in range(batch_size)] #Context is a placeholder that contains the encoded versions of the input text
-                })[:, len(context_tokens):]
+                
                 for i in range(batch_size):
                     generated += 1
-                    print(out)
+                    max_length = len(context_tokens) + length
+                    contexts = [context_tokens]
+                    print(contexts)
+                    probability_map = {}
+                    
+                    while True: #This will probably check if the context lengths are less than max_length
+                        new_contexts = []
+                        if (len(contexts[0]) == max_length):
+                            break
+                        for con in contexts:
+                            out_logits = sess.run(logits, feed_dict={
+                                context: [con for _ in range(batch_size)]
+                            })
 
-                    total_chance = 0
+                            logit_indeces = []
+                            logit_probs = []
+                            for logit_index in range(len(out_logits[0])):
+                                if (out_logits.item(logit_index) > -10000000000.000):
+                                    #We should get (beam width) # of logit indeces and probabilities
+                                    logit_indeces.append(logit_index)
+                                    logit_probs.append(out_logits[0].item(logit_index))
+
+
+                            for i in range(len(logit_indeces)):
+                                temp_context = con.copy()
+                                temp_context.append(logit_indeces[i])
+                                # print(con)
+                                # print(temp_context)
+                                if str(con) in probability_map:
+                                    probability_map[str(temp_context)] = probability_map[str(con)] + logit_probs[i]
+                                else:
+                                    probability_map[str(temp_context)] = logit_probs[i]
+                                new_contexts.append(temp_context)
+                        
+                        contexts = new_contexts
+                        new_probs = {}
+                        for con in contexts:
+                            if str(con) in probability_map:
+                                new_probs[str(con)] = probability_map[str(con)]
+                        top_probs = dict(sorted(new_probs.items(), key=lambda x: x[1], reverse=True)[:beam_width]) #Gets the top beam_width probabilities off the top
+                        string_contexts = list(top_probs.keys())
+                        new_contexts = []
+                        for con in string_contexts:
+                            str_values = con.strip('][').split(', ')
+                            new_values = []
+                            for val in str_values:
+                                new_values.append(int(val))
+                            new_contexts.append(new_values)
+                        contexts = new_contexts
+                                                    
+                        
+                    print(contexts)
                     
-                    text = enc.decode(out[i])
-                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
+                    for context in contexts:
+                        con_string = enc.decode(context)
+                        print(con_string)
+
+                    # print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     
-                    print(text)
+                    # print(text)
+                    return
 
             print("=" * 80)
 
-    #This is partially pseudocode. Needs to be tested to see if it works
-    def recursive_search(token, context_tokens):
-        if "The length is reached":
-            #See if it is the highest probability and replace the context_tokens if so
-        context_tokens = np.append(context_tokens, token)
-        out_logits = sess.run(logits, feed_dict={
-                    context: [context_tokens for _ in range(batch_size)]
-                })
-        out_logits = out_logits[out_logits > -10000000000.0]
-        for logit in out_logits:
-            recursive_search(logit, context_tokens)
+    
         
     
 
@@ -150,3 +205,5 @@ def beam_search(
 if __name__ == '__main__':
     fire.Fire(beam_search)
 
+#For every step, keep the same width (ex. 3)
+#Just keep track of a set of contexts that is beam width long
