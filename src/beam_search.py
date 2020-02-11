@@ -47,10 +47,10 @@ def beam_search(
     seed=None,
     nsamples=1,
     batch_size=1,
-    length=30,
+    length=100,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
     beam_width=3,
-    top_k=3,
+    top_k=None,
     top_p=1,
     models_dir='models',
     input_samples=[],
@@ -159,19 +159,21 @@ def beam_search(
                             for i in range(len(logit_indeces)):
                                 temp_context = con.copy()
                                 temp_context.append(logit_indeces[i])
-                                # print(con)
-                                # print(temp_context)
                                 if str(con) in probability_map:
                                     probability_map[str(temp_context)] = probability_map[str(con)] + logit_probs[i]
                                 else:
                                     probability_map[str(temp_context)] = logit_probs[i]
                                 new_contexts.append(temp_context)
-                        
+
                         contexts = new_contexts
                         new_probs = {}
                         for con in contexts:
                             if str(con) in probability_map:
                                 new_probs[str(con)] = probability_map[str(con)]
+                                                        
+                        # for con in contexts:
+                        #     print(enc.decode(con) + " --- Probability: ---" + str(probability_map[str(con)]))
+
                         top_probs = dict(sorted(new_probs.items(), key=lambda x: x[1], reverse=True)[:beam_width]) #Gets the top beam_width probabilities off the top
                         string_contexts = list(top_probs.keys())
                         new_contexts = []
@@ -181,7 +183,8 @@ def beam_search(
                             for val in str_values:
                                 new_values.append(int(val))
                             new_contexts.append(new_values)
-                        contexts = new_contexts
+
+                        contexts = new_contexts                        
                                                     
                         
                     print(contexts)
