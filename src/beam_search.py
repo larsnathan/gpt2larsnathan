@@ -47,7 +47,7 @@ def beam_search(
     seed=None,
     nsamples=1,
     batch_size=1,
-    length=100,
+    length=12,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
     beam_width=3,
     top_k=None,
@@ -109,6 +109,9 @@ def beam_search(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
+        o_file = open("outbeam.txt", "a")
+        o_file.write(model_name + " - Beam Width " + str(beam_width) + '\n')
+
         input_iter = 0
         start_time = time.perf_counter()
         while True:
@@ -119,10 +122,6 @@ def beam_search(
                 print(raw_text)
             elif (len(input_samples) == 0):
                 raw_text = input("Model prompt >>> ")
-
-            time_elapsed = time.perf_counter()-start_time
-
-            print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
 
             while not raw_text:
                 print('Prompt should not be empty!')
@@ -135,6 +134,7 @@ def beam_search(
                     generated += 1
                     max_length = len(context_tokens) + length
                     contexts = [context_tokens]
+                    o_file.write(str(contexts) + '\n')
                     print(contexts)
                     probability_map = {}
                     
@@ -191,13 +191,19 @@ def beam_search(
                     
                     for context in contexts:
                         con_string = enc.decode(context)
+                        o_file.write(con_string + '\n')
                         print(con_string)
 
                     # print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     
                     # print(text)
+                    
+                    time_elapsed = time.perf_counter()-start_time
+                    o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+                    print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
                     return
 
+            o_file.write("=" * 80 + '\n')
             print("=" * 80)
 
     
