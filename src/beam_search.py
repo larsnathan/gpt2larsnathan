@@ -23,31 +23,24 @@ import model, sample, encoder
 # - Should we use length and top_k variables or make seperate ones?
 # - Could be recursive: for k in top_k: context += k; next_tokens(k, context);
 
-# def recursive_search(tokens, current_prob, max_length, max_prob, sess, logits):
-#     context = tf.placeholder(tf.int32, [1, None])
-#     if (len(tokens) >= max_length):
-#         #See if it is the highest probability and replace the context_tokens if so
-#         if (current_prob > max_prob):
-#             max_prob = current_prob
-#             max_tokens = tokens
-#         return
+#Notes on functionality:
+# When testing, there is always only a difference on the last token
+# However, if we increase the beam width, the outcome strings change
+# So, the path doesn't always follow the most likely token, in fact, it often doesn't
+# However, there are some tokens that are much more sure of the following tokens
+# For example, one token may be slightly less likely than another token, they may all be around -70 log probability
+# For the next token though, the one that is slightly less likely has beam_width number of tokens with about -40 log probability,
+# and the token that is slightly more likely has beam_width number of tokens with about -90 log probability.
+# Thus, every one from the less likely token becomes the new context
+# The largest model seems to be more deterministic and higher beam width has similar results to lower beam widths
 
-#     out_logits = sess.run(logits, feed_dict={
-#                 context: [tokens for _ in range(1)]
-#             })
-
-#     for logit_index in range(out_logits.size):
-#         if (out_logits.item(logit_index) > -100000000000.000):
-#             new_context = np.append(tokens, logit_index)
-#             current_prob += out_logits.item(logit_index)
-#             recursive_search(new_context, current_prob, max_length, max_prob, sess, logits)
 
 def beam_search(
     model_name='124M',
     seed=None,
     nsamples=1,
     batch_size=1,
-    length=12,
+    length=10,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
     beam_width=3,
     top_k=None,
@@ -109,8 +102,8 @@ def beam_search(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
-        o_file = open("outbeam.txt", "a")
-        o_file.write(model_name + " - Beam Width " + str(beam_width) + '\n')
+        # o_file = open("outbeam.txt", "a")
+        # o_file.write(model_name + " - Beam Width " + str(beam_width) + '\n')
 
         input_iter = 0
         start_time = time.perf_counter()
@@ -134,7 +127,7 @@ def beam_search(
                     generated += 1
                     max_length = len(context_tokens) + length
                     contexts = [context_tokens]
-                    o_file.write(str(contexts) + '\n')
+                    # o_file.write(str(contexts) + '\n')
                     print(contexts)
                     probability_map = {}
                     
@@ -146,23 +139,33 @@ def beam_search(
                             out_logits = sess.run(logits, feed_dict={
                                 context: [con for _ in range(batch_size)]
                             })
+                            
+                            # Normalize the outputs
+                            out_logits = out_logits - np.max(out_logits)
+                            eo_logits = np.exp(out_logits) + 1e-20
+                            out_logits = np.log(  eo_logits / (np.sum(eo_logits))   )
 
                             logit_indeces = []
                             logit_probs = []
                             for logit_index in range(len(out_logits[0])):
-                                if (out_logits.item(logit_index) > -10000000000.000):
+                                if (out_logits.item(logit_index) > np.min(out_logits)):
                                     #We should get (beam width) # of logit indeces and probabilities
                                     logit_indeces.append(logit_index)
                                     logit_probs.append(out_logits[0].item(logit_index))
-
 
                             for i in range(len(logit_indeces)):
                                 temp_context = con.copy()
                                 temp_context.append(logit_indeces[i])
                                 if str(con) in probability_map:
                                     probability_map[str(temp_context)] = probability_map[str(con)] + logit_probs[i]
+                                    # o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]) + "\n")
+                                    print("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]))
+
                                 else:
                                     probability_map[str(temp_context)] = logit_probs[i]
+                                    # o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]) + "\n")
+                                    print("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]))
+
                                 new_contexts.append(temp_context)
 
                         contexts = new_contexts
@@ -191,7 +194,7 @@ def beam_search(
                     
                     for context in contexts:
                         con_string = enc.decode(context)
-                        o_file.write(con_string + '\n')
+                        # o_file.write(con_string + '\n')
                         print(con_string)
 
                     # print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
@@ -199,15 +202,13 @@ def beam_search(
                     # print(text)
                     
                     time_elapsed = time.perf_counter()-start_time
-                    o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+                    # o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
                     print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
                     return
 
-            o_file.write("=" * 80 + '\n')
+            # o_file.write("=" * 80 + '\n')
             print("=" * 80)
 
-    
-        
     
 
 
@@ -216,3 +217,6 @@ if __name__ == '__main__':
 
 #For every step, keep the same width (ex. 3)
 #Just keep track of a set of contexts that is beam width long
+
+#Possibilities: A* search - Keep expanding the lowest probability, going back (fibonacci heap or np.max)
+#Keep looking at this one too

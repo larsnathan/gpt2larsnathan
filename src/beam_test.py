@@ -6,12 +6,12 @@ import fire
 
 def beam_test():
 
-    models = ["124M", "355M"]
-    context = "What is the first step to cleaning the kitchen?"
+    models = ["124M", "1558M"]
+    context = "To bake a cake, you must"
 
     for model in models:
         starting_beam = 1
-        ending_beam = 10
+        ending_beam = 4
         beam_incr = 1
         
         for i in range(starting_beam, ending_beam, beam_incr):
