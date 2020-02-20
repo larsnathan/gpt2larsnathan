@@ -7,15 +7,16 @@ import fire
 def beam_test():
 
     models = ["124M", "1558M"]
-    context = "To bake a cake, you must"
+    context = "The next part is"
+    length = 20
 
     for model in models:
-        starting_beam = 1
-        ending_beam = 4
+        starting_beam = 6
+        ending_beam = 8
         beam_incr = 1
         
         for i in range(starting_beam, ending_beam, beam_incr):
-            beam_search(model_name=model, input_samples=[context], beam_width=i)
+            beam_search(model_name=model, input_samples=[context], beam_width=i, length=length)
         print("Finished for model: " + model + "\n\n")
 
         

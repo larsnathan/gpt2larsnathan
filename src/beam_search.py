@@ -102,8 +102,8 @@ def beam_search(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
-        # o_file = open("outbeam.txt", "a")
-        # o_file.write(model_name + " - Beam Width " + str(beam_width) + '\n')
+        o_file = open("outbeam.txt", "a")
+        o_file.write(model_name + " - Beam Width " + str(beam_width) + '\n')
 
         input_iter = 0
         start_time = time.perf_counter()
@@ -127,7 +127,7 @@ def beam_search(
                     generated += 1
                     max_length = len(context_tokens) + length
                     contexts = [context_tokens]
-                    # o_file.write(str(contexts) + '\n')
+                    o_file.write(str(contexts) + '\n')
                     print(contexts)
                     probability_map = {}
                     
@@ -158,12 +158,12 @@ def beam_search(
                                 temp_context.append(logit_indeces[i])
                                 if str(con) in probability_map:
                                     probability_map[str(temp_context)] = probability_map[str(con)] + logit_probs[i]
-                                    # o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]) + "\n")
+                                    o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]) + "\n")
                                     print("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]))
 
                                 else:
                                     probability_map[str(temp_context)] = logit_probs[i]
-                                    # o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]) + "\n")
+                                    o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]) + "\n")
                                     print("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]))
 
                                 new_contexts.append(temp_context)
@@ -194,7 +194,7 @@ def beam_search(
                     
                     for context in contexts:
                         con_string = enc.decode(context)
-                        # o_file.write(con_string + '\n')
+                        o_file.write(con_string + '\n')
                         print(con_string)
 
                     # print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
@@ -202,7 +202,7 @@ def beam_search(
                     # print(text)
                     
                     time_elapsed = time.perf_counter()-start_time
-                    # o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+                    o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
                     print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
                     return
 
