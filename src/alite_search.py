@@ -24,7 +24,7 @@ def alite_search(
     length=10,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
     beam_width=3,
-    max_contexts=100,
+    max_contexts=40,
     top_k=None,
     top_p=1,
     models_dir='models',
@@ -84,8 +84,8 @@ def alite_search(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
-        # o_file = open("outbeam.txt", "a")
-        # o_file.write(model_name + " - Beam Width " + str(beam_width) + '\n')
+        o_file = open("outalite.txt", "a")
+        o_file.write(model_name + " - Beam Width: " + str(beam_width) + " - Max Contexts:" + str(max_contexts) + '\n')
 
         input_iter = 0
         while True:
@@ -121,7 +121,6 @@ def alite_search(
                         max_key = str(contexts[0])
                         if (bool(probability_map)):
                             max_key = max(probability_map.keys(), key=(lambda k: probability_map[k]))
-                            print("Max key: " + max_key + " --- with probability: " + str(probability_map[max_key]))
                         else:
                             probability_map[str(context_tokens)] = 0
 
@@ -209,21 +208,31 @@ def alite_search(
 
                     for context in new_contexts:
                         con_string = enc.decode(context)
-                        # o_file.write(con_string + '\n')
+                        o_file.write(con_string + " -- Length: " + str(len(context)) + " -- Probability: " + str(probability_map[str(context)]) + '\n')
                         print(con_string + " -- Length: " + str(len(context)) + " -- Probability: " + str(probability_map[str(context)]))
 
-                    # print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
+                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     
                     # print(text)
                     
+                    probs = np.array(list(probability_map.values()))
+
                     time_elapsed = time.perf_counter()-start_time
-                    # o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
-                    print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
+                    o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n')
+                    print('\n' + str(time_elapsed) + " seconds elapsed" + '\n')
                     print(str(times_run) + " iterations run")
-                    print (str(len(new_contexts)) + " contexts outputted")
+                    o_file.write(str(times_run) + " iterations run" + '\n')
+                    print(str(len(new_contexts)) + " contexts outputted")
+                    o_file.write(str(len(new_contexts)) + " contexts outputted" + '\n')
+                    print(str(np.std(probs)) + " -- Standard deviation of probabilities")
+                    o_file.write(str(np.std(probs)) + " -- Standard deviation of probabilities" + '\n')
+                    print(str(np.mean(probs)) + " -- Mean probability")
+                    o_file.write(str(np.mean(probs)) + " -- Mean probability" + '\n')
+                    o_file.write("=" * 80 + '\n')
+                    print("=" * 80)
                     return
 
-            # o_file.write("=" * 80 + '\n')
+            o_file.write("=" * 80 + '\n')
             print("=" * 80)
 
     
