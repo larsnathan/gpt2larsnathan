@@ -6,6 +6,8 @@ import fire
 
 def alite_test():
 
+    #TODO: Show histogram from the probability outputs
+
     models = ["124M"]#, "1558M"]
     context = "The first step to baking cookies is"
     #max_contexts = 40

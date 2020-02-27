@@ -6,6 +6,7 @@ import os
 import numpy as np
 import tensorflow as tf
 import time
+from matplotlib import pyplot as plt
 
 import model, sample, encoder
 
@@ -23,8 +24,9 @@ def alite_search(
     batch_size=1,
     length=10,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
-    beam_width=3,
-    max_contexts=40,
+    beam_width=4,
+    max_contexts=10000,
+    max_expansions=100,
     top_k=None,
     top_p=1,
     models_dir='models',
@@ -126,6 +128,8 @@ def alite_search(
 
                         if (len(probability_map) >= max_contexts):
                             break
+                        if (times_run >= max_expansions):
+                            break
                         
                         #Find the highest probability context
                         con = max_key
@@ -135,7 +139,6 @@ def alite_search(
                             new_values.append(int(val))
                         con = new_values
                         
-                    
                         out_logits = sess.run(logits, feed_dict={
                             context: [con for _ in range(batch_size)]
                         })
@@ -155,6 +158,7 @@ def alite_search(
                                 logit_indeces.append(logit_index)
                                 logit_probs.append(out_logits[0].item(logit_index))
 
+                        new_contexts = []
                         for i in range(len(logit_indeces)):
                             temp_context = con.copy()
                             temp_context.append(logit_indeces[i])
@@ -192,7 +196,23 @@ def alite_search(
                                 new_values.append(int(val))
                             new_contexts.append(new_values)
 
-                        contexts = new_contexts 
+                        contexts = new_contexts
+
+                        # ------------------ EVERYTHING YOU SEE BELOW HERE IS FOR PRINTING ----------------------
+                        sorted_probs = dict(sorted(probability_map.items(), key=lambda x: x[1], reverse=True))
+                        string_contexts = list(sorted_probs)
+                        new_contexts = []
+                        for some_con in string_contexts:
+                            str_values = some_con.strip('][').split(', ')
+                            new_values = []
+                            for val in str_values:
+                                new_values.append(int(val))
+                            new_contexts.append(new_values)
+
+                        for some_context in new_contexts:
+                            con_string = enc.decode(some_context)
+                            #print(con_string + " -- Length: " + str(len(some_context)) + " -- Probability: " + str(probability_map[str(some_context)]))
+                        print('-'*80)
                         
                     
                     sorted_probs = dict(sorted(probability_map.items(), key=lambda x: x[1], reverse=True))
@@ -206,10 +226,10 @@ def alite_search(
                         new_contexts.append(new_values)
 
 
-                    for context in new_contexts:
-                        con_string = enc.decode(context)
-                        o_file.write(con_string + " -- Length: " + str(len(context)) + " -- Probability: " + str(probability_map[str(context)]) + '\n')
-                        print(con_string + " -- Length: " + str(len(context)) + " -- Probability: " + str(probability_map[str(context)]))
+                    for some_context in new_contexts:
+                        con_string = enc.decode(some_context)
+                        o_file.write(con_string + " -- Length: " + str(len(some_context)) + " -- Probability: " + str(probability_map[str(some_context)]) + '\n')
+                        print(con_string + " -- Length: " + str(len(some_context)) + " -- Probability: " + str(probability_map[str(some_context)]))
 
                     print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     
@@ -230,6 +250,8 @@ def alite_search(
                     o_file.write(str(np.mean(probs)) + " -- Mean probability" + '\n')
                     o_file.write("=" * 80 + '\n')
                     print("=" * 80)
+                    # plt.hist(probs)
+                    # plt.show()
                     return
 
             o_file.write("=" * 80 + '\n')
@@ -242,3 +264,7 @@ if __name__ == '__main__':
     fire.Fire(alite_search)
 
 #Some observations: We get logits (num_contexts/(beam_width-1)) times
+#Next: Generate things that are much longer, and consider all contexts
+#Add a parameter: Max number of times a node can expand
+#Then, analyze the results
+#Have a better visualization - google around
