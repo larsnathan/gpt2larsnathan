@@ -6,27 +6,23 @@ import os
 import numpy as np
 import tensorflow as tf
 import time
-from matplotlib import pyplot as plt
+import igraph
+from igraph import *
+import plotly.graph_objects as go
+
 
 import model, sample, encoder
 
-# How it should function:
-# It is similar to the beam search,
-# but it only keeps track of the edges of the tree, instead of keeping track of every context
-# You take the beam_width highest probability contexts that are currently in the array of available contexts,
-# then replace it with the beam_width top k appended to it
-
-
-def alite_search(
+def alite_graph(
     model_name='124M',
     seed=None,
     nsamples=1,
     batch_size=1,
     length=10,
     temperature=1, # .5 usually has numbered steps, .7 usually does not
-    beam_width=15,
-    max_contexts=10000,
-    max_expansions=150,
+    beam_width=6,
+    max_contexts=800,
+    max_expansions=1000,
     top_k=None,
     top_p=1,
     models_dir='models',
@@ -86,10 +82,10 @@ def alite_search(
         ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
         saver.restore(sess, ckpt)
 
-        o_file = open("outalite.txt", "a")
-        o_file.write(model_name + " - Beam Width: " + str(beam_width) + " - Max Contexts:" + str(max_contexts) + '\n')
-
         input_iter = 0
+        start_time = time.perf_counter()
+
+
         while True:
             raw_text = ""
             if (input_iter < len(input_samples)):
@@ -103,9 +99,14 @@ def alite_search(
                 print('Prompt should not be empty!')
                 raw_text = input("Model prompt >>> ")
             context_tokens = enc.encode(raw_text)
-            start_time = time.perf_counter()
+            generated = 0
+                    
+            #Create a graph to map the contexts
+            g = Graph(directed=True)
+            g.add_vertex(str(context_tokens))
             generated = 0
             times_run = 0
+
             for _ in range(nsamples // batch_size):
                 
                 for i in range(batch_size):
@@ -115,6 +116,9 @@ def alite_search(
                     # o_file.write(str(contexts) + '\n')
                     print(contexts)
                     probability_map = {}
+                    full_probability_map = {}
+                    all_contexts = []
+                    all_contexts.append(context_tokens)
                     
                     while True: #This will probably check if the context lengths are less than max_length
                         new_contexts = []
@@ -125,6 +129,8 @@ def alite_search(
                             max_key = max(probability_map.keys(), key=(lambda k: probability_map[k]))
                         else:
                             probability_map[str(context_tokens)] = 0
+                            full_probability_map[str(context_tokens)] = 0
+
 
                         if (len(probability_map) >= max_contexts):
                             break
@@ -162,13 +168,22 @@ def alite_search(
                         for i in range(len(logit_indeces)):
                             temp_context = con.copy()
                             temp_context.append(logit_indeces[i])
+                            all_contexts.append(temp_context)
                             if str(con) in probability_map.keys():
+                                g.add_vertex(str(temp_context))
+                                parent_context = temp_context[0:len(temp_context)-1]
+                                g.add_edge(str(temp_context),str(parent_context))
                                 probability_map[str(temp_context)] = probability_map[str(con)] + logit_probs[i]
+                                full_probability_map[str(temp_context)] = probability_map[str(con)] + logit_probs[i]
                                 # o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]) + "\n")
                                 # print("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " + " + str(probability_map[str(con)]) + " = " + str(probability_map[str(temp_context)]))
 
                             else:
+                                g.add_vertex(str(temp_context))
+                                parent_context = temp_context[0:len(temp_context)-1]
+                                g.add_edge(str(temp_context),str(parent_context))
                                 probability_map[str(temp_context)] = logit_probs[i]
+                                full_probability_map[str(temp_context)] = logit_probs[i]
                                 # o_file.write("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]) + "\n")
                                 # print("Probability for " + str(temp_context) + " is " + str(logit_probs[i]) + " = " + str(probability_map[str(temp_context)]))
 
@@ -197,74 +212,106 @@ def alite_search(
                             new_contexts.append(new_values)
 
                         contexts = new_contexts
+                                                    
 
-                        # ------------------ EVERYTHING YOU SEE BELOW HERE IS FOR PRINTING ----------------------
-                        sorted_probs = dict(sorted(probability_map.items(), key=lambda x: x[1], reverse=True))
-                        string_contexts = list(sorted_probs)
-                        new_contexts = []
-                        for some_con in string_contexts:
-                            str_values = some_con.strip('][').split(', ')
-                            new_values = []
-                            for val in str_values:
-                                new_values.append(int(val))
-                            new_contexts.append(new_values)
-
-                        for some_context in new_contexts:
-                            con_string = enc.decode(some_context)
-                            #print(con_string + " -- Length: " + str(len(some_context)) + " -- Probability: " + str(probability_map[str(some_context)]))
-                        print('-'*80)
-                        
+                    all_strings = []   
+                    for context in all_contexts:
+                        con_string = enc.decode(context)
+                        all_strings.append(con_string)
                     
-                    sorted_probs = dict(sorted(probability_map.items(), key=lambda x: x[1], reverse=True))
-                    string_contexts = list(sorted_probs)
-                    new_contexts = []
-                    for con in string_contexts:
-                        str_values = con.strip('][').split(', ')
-                        new_values = []
-                        for val in str_values:
-                            new_values.append(int(val))
-                        new_contexts.append(new_values)
+                    for context in contexts:
+                        con_string = enc.decode(context)
+                        print(con_string)
 
-
-                    for some_context in new_contexts:
-                        con_string = enc.decode(some_context)
-                        # o_file.write(con_string + " -- Length: " + str(len(some_context)) + " -- Probability: " + str(probability_map[str(some_context)]) + '\n')
-                        print(con_string + " -- Length: " + str(len(some_context)) + " -- Probability: " + str(probability_map[str(some_context)]))
-
-                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
+                    # print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40 + '\n')
                     
                     # print(text)
+
+                    nr_vertices = g.vcount()
+                    print(nr_vertices)
+
+                    es = EdgeSeq(g)
+                    E = [e.tuple for e in es]
+                    lay = g.layout_auto()
+
+                    v_label = list(map(str, range(nr_vertices)))
+                    position = {k: lay[k] for k in range(nr_vertices)}
+                    Y = [lay[k][1] for k in range(nr_vertices)]
+                    M = max(Y)
+                    L = len(position)
+                    Xn = [position[k][0] for k in range(L)]
+                    Yn = [2*M-position[k][1] for k in range(L)]
+                    Xe = []
+                    Ye = []
+                    for edge in E:
+                        Xe+=[position[edge[0]][0],position[edge[1]][0], None]
+                        Ye+=[2*M-position[edge[0]][1],2*M-position[edge[1]][1], None]
+                    labels = v_label
+
+                    hover_annotations = [all_strings[x] + ' - Probability: ' + str(full_probability_map[str(all_contexts[x])]) for x in range(len(all_strings))]
+
+                    def make_annotations(pos, text, font_size=10, font_color='rgb(250,250,250)'):
+                        L=len(pos)
+                        if len(text)!=L:
+                            raise ValueError('The lists pos and text must have the same len')
+                        annotations = []
+                        for k in range(L):
+                            annotations.append(
+                                dict(
+                                    text=str(text[k]), # or replace labels with a different list for the text within the circle
+                                    x=pos[k][0], y=2*M-position[k][1],
+                                    xref='x1', yref='y1',
+                                    font=dict(color=font_color, size=font_size),
+                                    showarrow=False)
+                            )
+                        return annotations
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=Xe,
+                                    y=Ye,
+                                    mode='lines',
+                                    line=dict(color='rgb(210,210,210)', width=1),
+                                    hoverinfo='none'
+                                    ))
+                    fig.add_trace(go.Scatter(x=Xn,
+                                    y=Yn,
+                                    mode='markers',
+                                    name='bla',
+                                    marker=dict(symbol='circle-dot',
+                                                    size=18,
+                                                    color='#6175c1',    #'#DB4551',
+                                                    line=dict(color='rgb(50,50,50)', width=1)
+                                                    ),
+                                    text=hover_annotations,
+                                    hoverinfo='text',
+                                    opacity=0.8
+                                    ))
+                    axis = dict(showline=False, # hide axis line, grid, ticklabels and  title
+                                zeroline=False,
+                                showgrid=False,
+                                showticklabels=False,
+                                )
                     
-                    probs = np.array(list(probability_map.values()))
+                    fig.update_layout(title= 'Tree',
+                                annotations=make_annotations(position, v_label),
+                                font_size=12,
+                                showlegend=False,
+                                xaxis=axis,
+                                yaxis=axis,
+                                margin=dict(l=40, r=40, b=85, t=100),
+                                hovermode='closest',
+                                plot_bgcolor='rgb(248,248,248)'
+                                )
+                    fig.show()
 
                     time_elapsed = time.perf_counter()-start_time
-                    # o_file.write('\n' + str(time_elapsed) + " seconds elapsed" + '\n')
-                    print('\n' + str(time_elapsed) + " seconds elapsed" + '\n')
-                    print(str(times_run) + " iterations run")
-                    # o_file.write(str(times_run) + " iterations run" + '\n')
-                    print(str(len(new_contexts)) + " contexts outputted")
-                    # o_file.write(str(len(new_contexts)) + " contexts outputted" + '\n')
-                    print(str(np.std(probs)) + " -- Standard deviation of probabilities")
-                    # o_file.write(str(np.std(probs)) + " -- Standard deviation of probabilities" + '\n')
-                    print(str(np.mean(probs)) + " -- Mean probability")
-                    # o_file.write(str(np.mean(probs)) + " -- Mean probability" + '\n')
-                    # o_file.write("=" * 80 + '\n')
-                    print("=" * 80)
-                    plt.hist(probs)
-                    plt.show()
+                    print('\n' + str(time_elapsed) + " seconds elapsed" + '\n' + '-' * 60 + '\n')
                     return
 
-            o_file.write("=" * 80 + '\n')
             print("=" * 80)
 
     
 
 
 if __name__ == '__main__':
-    fire.Fire(alite_search)
-
-#Some observations: We get logits (num_contexts/(beam_width-1)) times
-#Next: Generate things that are much longer, and consider all contexts
-#Add a parameter: Max number of times a node can expand
-#Then, analyze the results
-#Have a better visualization - google around
+    fire.Fire(alite_graph)
