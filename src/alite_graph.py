@@ -230,6 +230,7 @@ def alite_graph(
                     nr_vertices = g.vcount()
                     print(nr_vertices)
 
+
                     es = EdgeSeq(g)
                     E = [e.tuple for e in es]
                     lay = g.layout_auto()
@@ -292,7 +293,7 @@ def alite_graph(
                                 showticklabels=False,
                                 )
                     
-                    fig.update_layout(title= 'Tree',
+                    fig.update_layout(title= 'Tree - Nodes: ' + str(len(all_contexts)) + ' Beam width: ' + str(beam_width),
                                 annotations=make_annotations(position, v_label),
                                 font_size=12,
                                 showlegend=False,
@@ -315,3 +316,10 @@ def alite_graph(
 
 if __name__ == '__main__':
     fire.Fire(alite_graph)
+
+#Next step: package it up into a module
+#Termination criteria: max length, get the first things with that length
+#                       or by total number of nodes
+#                       or pass in an end of sequence token that terminates the sequence
+#Loading model: pass in a function, which accepts as input a string, outputs logits or whatever
+#Basically beam and alite functions don't see gpt2
